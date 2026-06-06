@@ -52,9 +52,7 @@ Antes de instalar Kubernetes, se puede instalar Docker en el nodo master para ex
 
 La instalación de Docker está documentada en:
 
-```text
 [Instalación de Docker](Ejercicios/Instalar_Docker.md)
-```
 
 Docker se utiliza como herramienta didáctica inicial. Kubernetes se instalará posteriormente usando `containerd` como runtime de contenedores.
 
@@ -64,9 +62,8 @@ Docker se utiliza como herramienta didáctica inicial. Kubernetes se instalará 
 
 La instalación de Kubernetes con `kubeadm` está documentada en:
 
-```text
 [Instalación de Kubernetes](Ejercicios/Instalar_Kubernetes.md)
-```
+
 
 La guía incluye:
 
