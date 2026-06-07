@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs-1
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-manual
+  nfs:
+    server: REEMPLAZAR_POR_IP_NFS
+    path: /srv/nfs/pv1
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs-2
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-manual
+  nfs:
+    server: REEMPLAZAR_POR_IP_NFS
+    path: /srv/nfs/pv2

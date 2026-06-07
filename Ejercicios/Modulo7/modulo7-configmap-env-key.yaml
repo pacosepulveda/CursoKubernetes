@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-cm-key
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27-alpine
+      env:
+        - name: option
+          valueFrom:
+            configMapKeyRef:
+              name: options
+              key: var5
+  restartPolicy: Never

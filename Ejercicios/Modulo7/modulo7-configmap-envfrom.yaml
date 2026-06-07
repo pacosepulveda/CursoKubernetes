@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-cm-envfrom
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27-alpine
+      envFrom:
+        - configMapRef:
+            name: anotherone
+  restartPolicy: Never
