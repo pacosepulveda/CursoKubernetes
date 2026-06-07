@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-redes
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-debug
+  namespace: demo-redes
+  labels:
+    app: network-debug
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: network-debug
+  template:
+    metadata:
+      labels:
+        app: network-debug
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: netshoot
+          image: nicolaka/netshoot:v0.15
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "sleep infinity"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: network-debug
