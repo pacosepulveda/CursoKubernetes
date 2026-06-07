@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "modulo10-web.fullname" . }}-html
+  labels:
+    {{- include "modulo10-web.labels" . | nindent 4 }}
+data:
+  index.html: |
+    <!doctype html>
+    <html>
+    <head><title>{{ .Values.html.title }}</title></head>
+    <body>
+      <h1>{{ .Values.html.title }}</h1>
+      <p>{{ .Values.html.body }}</p>
+      <p>Release: {{ .Release.Name }}</p>
+      <p>Revision gestionada por Helm.</p>
+    </body>
+    </html>
