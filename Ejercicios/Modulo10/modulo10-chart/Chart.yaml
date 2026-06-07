@@ -1,0 +1,6 @@
+apiVersion: v2
+name: modulo10-web
+description: Chart didactico para practicar Helm en Kubernetes
+version: 0.1.0
+appVersion: "1.27"
+type: application
