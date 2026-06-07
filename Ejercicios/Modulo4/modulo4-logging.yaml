@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: logme
+  labels:
+    app: logme
+    module: modulo4
+spec:
+  containers:
+    - name: gen
+      image: busybox:1.36
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -c
+        - |
+          i=1
+          while true; do
+            echo "stdout log line ${i}"
+            echo "stderr log line ${i}" >&2
+            i=$((i+1))
+            sleep 2
+          done
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oneshot
+  labels:
+    app: oneshot
+    module: modulo4
+spec:
+  restartPolicy: Never
+  containers:
+    - name: gen
+      image: busybox:1.36
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -c
+        - |
+          i=9
+          while [ "$i" -ge 1 ]; do
+            echo "countdown: ${i}"
+            i=$((i-1))
+            sleep 1
+          done
+          echo "finished"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: restart-logs
+  labels:
+    app: restart-logs
+    module: modulo4
+spec:
+  restartPolicy: Always
+  containers:
+    - name: gen
+      image: busybox:1.36
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "starting container"
+          sleep 3
+          echo "simulating an application error" >&2
+          exit 1
