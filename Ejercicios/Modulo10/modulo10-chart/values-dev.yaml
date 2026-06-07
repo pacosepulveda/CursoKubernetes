@@ -1,0 +1,8 @@
+replicaCount: 1
+html:
+  title: "Modulo 10 - DEV"
+  body: "Valores cargados desde values-dev.yaml"
+service:
+  type: NodePort
+  port: 80
+  nodePort: 30091

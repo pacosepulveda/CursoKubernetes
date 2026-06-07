@@ -1,0 +1,8 @@
+replicaCount: 3
+html:
+  title: "Modulo 10 - PROD"
+  body: "Valores cargados desde values-prod.yaml"
+service:
+  type: NodePort
+  port: 80
+  nodePort: 30092
