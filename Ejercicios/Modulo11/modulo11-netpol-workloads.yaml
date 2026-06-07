@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netpol-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: netpol-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+      role: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        role: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: busybox:1.36
+        command: ["sh", "-c"]
+        args:
+        - |
+          mkdir -p /www
+          echo 'frontend OK' > /www/index.html
+          httpd -f -p 8080 -h /www
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: netpol-demo
+spec:
+  selector:
+    app: frontend
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: netpol-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+      role: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        role: backend
+    spec:
+      containers:
+      - name: backend
+        image: busybox:1.36
+        command: ["sh", "-c"]
+        args:
+        - |
+          mkdir -p /www
+          echo 'backend OK' > /www/index.html
+          httpd -f -p 8080 -h /www
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: netpol-demo
+spec:
+  selector:
+    app: backend
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client
+  namespace: netpol-demo
+  labels:
+    app: client
+    role: client
+spec:
+  containers:
+  - name: client
+    image: busybox:1.36
+    command: ["sh", "-c", "sleep 36000"]
