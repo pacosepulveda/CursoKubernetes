@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hello-daemonset-error
+spec:
+  selector:
+    matchLabels:
+      app: hello-daemonset-error
+  template:
+    metadata:
+      labels:
+        app: hello-daemonset-error
+    spec:
+      containers:
+      - name: hello-container
+        image: busybox:1.36
+        command: ["/bin/sh", "-c", "echo 'Hello from Kubernetes DaemonSet!' && date"]
