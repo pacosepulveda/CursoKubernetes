@@ -1,0 +1,8 @@
+Aplicacion instalada.
+
+Comandos utiles:
+  kubectl get deploy,pod,svc -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Si usas NodePort:
+  NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+  curl http://$NODE_IP:{{ .Values.service.nodePort }}
