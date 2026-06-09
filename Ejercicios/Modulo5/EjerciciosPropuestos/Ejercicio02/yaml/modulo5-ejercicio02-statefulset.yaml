@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: contador
+  labels:
+    app: contador
+    modulo: "5"
+spec:
+  serviceName: contador
+  replicas: 3
+  selector:
+    matchLabels:
+      app: contador
+  template:
+    metadata:
+      labels:
+        app: contador
+    spec:
+      containers:
+        - name: contador
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              i=0
+              while true; do
+                echo "$(hostname) - contador=$i"
+                i=$((i+1))
+                sleep 10
+              done
