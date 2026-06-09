@@ -45,7 +45,7 @@ worker2      Ready    <none>           ...   v1.35.x   10.0.x.x
 Comprobamos que Calico está funcionando:
 
 ```bash
-kubectl get pods -n calico-system -o wide
+kubectl get pods -n kube-system -l 'k8s-app in (calico-node,calico-kube-controllers)' -o wide
 ```
 
 Si Calico se instaló con manifiestos clásicos en vez de operador, puede estar en `kube-system`:
