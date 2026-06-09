@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m4-web-ok
+  labels:
+    app: m4-diagnostico
+    componente: web
+    estado: correcto
+spec:
+  containers:
+    - name: web
+      image: nginx:1.27-alpine
+      ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m4-log-generator
+  labels:
+    app: m4-diagnostico
+    componente: logs
+    estado: correcto
+spec:
+  containers:
+    - name: logger
+      image: busybox:1.36
+      command:
+        - /bin/sh
+        - -c
+        - |
+          i=1
+          while true; do
+            echo "stdout - mensaje informativo numero $i"
+            echo "stderr - mensaje de advertencia numero $i" 1>&2
+            i=$((i+1))
+            sleep 3
+          done
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m4-crashloop
+  labels:
+    app: m4-diagnostico
+    componente: worker
+    estado: error
+spec:
+  restartPolicy: Always
+  containers:
+    - name: worker
+      image: busybox:1.36
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Iniciando proceso batch"
+          echo "Simulando un error de aplicacion"
+          exit 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m4-image-error
+  labels:
+    app: m4-diagnostico
+    componente: imagen
+    estado: error
+spec:
+  containers:
+    - name: app
+      image: nginx:version-inexistente-modulo4
