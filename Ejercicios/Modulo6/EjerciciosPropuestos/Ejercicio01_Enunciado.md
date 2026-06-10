@@ -257,7 +257,7 @@ Server: nginx/...
 Cuando termines el ejercicio:
 
 ```bash
-kubectl apply -f yaml/90-cleanup.yaml
+kubectl delete -f yaml/90-cleanup.yaml
 ```
 
 O bien:
