@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reporting-web
+  namespace: m7-troubleshooting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reporting-web
+  template:
+    metadata:
+      labels:
+        app: reporting-web
+    spec:
+      initContainers:
+        - name: init-content
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "<h1>Reporting Web</h1>" > /workdir/index.html
+              echo "<p>Contenido generado por initContainer.</p>" >> /workdir/index.html
+              echo "<p>Usuario de BD: ${DB_USER}</p>" >> /workdir/index.html
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-db-secret
+                  key: db-user
+          volumeMounts:
+            - name: data
+              mountPath: /workdir
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-db-secret
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-db-secret
+                  # Error intencionado: esta clave no existe en el Secret inicial.
+                  key: db-password
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/nginx/html
+            - name: config
+              mountPath: /etc/reporting
+              readOnly: true
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: nginx.conf
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: reporting-data
+        - name: config
+          configMap:
+            name: reporting-config
+            items:
+              # Error intencionado: esta clave no existe en el ConfigMap inicial.
+              - key: application.properties
+                path: application.properties
+        - name: nginx-config
+          configMap:
+            name: reporting-config
+            items:
+              - key: nginx.conf
+                path: nginx.conf

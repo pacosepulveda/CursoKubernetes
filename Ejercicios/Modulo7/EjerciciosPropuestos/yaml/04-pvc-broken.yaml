@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: reporting-data
+  namespace: m7-troubleshooting
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # Error intencionado: el PV disponible usa storageClassName manual-retain.
+  storageClassName: manual

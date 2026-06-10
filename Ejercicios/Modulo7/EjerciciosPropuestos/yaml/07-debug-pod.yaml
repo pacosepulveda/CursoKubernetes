@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-shell
+  namespace: m7-troubleshooting
+spec:
+  restartPolicy: Never
+  containers:
+    - name: shell
+      image: curlimages/curl:8.10.1
+      command: ["sh", "-c", "sleep 3600"]
