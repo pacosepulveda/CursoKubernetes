@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: statefuldaemonset-controller-code
+  namespace: sds-lab-system
+data:
+  controller.py: |
+    import json
+    import os
+    import ssl
+    import time
+    import urllib.parse
+    import urllib.request
+    import urllib.error
+    import hashlib
+    import re
+
+    API = "https://%s:%s" % (
+        os.environ["KUBERNETES_SERVICE_HOST"],
+        os.environ.get("KUBERNETES_SERVICE_PORT", "443"),
+    )
+    TOKEN = open("/var/run/secrets/kubernetes.io/serviceaccount/token").read().strip()
+    CA_CERT = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    CTX = ssl.create_default_context(cafile=CA_CERT)
+
+    GROUP = "lab.formacion.cloud"
+    VERSION = "v1alpha1"
+    PLURAL = "statefuldaemonsets"
+
+    def log(msg):
+        print(msg, flush=True)
+
+    def api(method, path, obj=None, content_type="application/json"):
+        data = None
+        headers = {"Authorization": "Bearer " + TOKEN}
+        if obj is not None:
+            data = json.dumps(obj).encode("utf-8")
+            headers["Content-Type"] = content_type
+        req = urllib.request.Request(API + path, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req, context=CTX, timeout=20) as resp:
+                raw = resp.read().decode("utf-8")
+                return resp.status, json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8")
+            return e.code, {"error": raw}
+        except Exception as e:
+            return 0, {"error": repr(e)}
+
+    def safe_name(prefix, node):
+        base = (prefix + "-" + node).lower()
+        base = re.sub(r"[^a-z0-9-]", "-", base).strip("-")
+        if len(base) <= 63:
+            return base
+        h = hashlib.sha1(base.encode()).hexdigest()[:8]
+        return base[:54].rstrip("-") + "-" + h
+
+    def list_active_namespaces():
+        code, data = api("GET", "/api/v1/namespaces")
+        if code != 200:
+            log("cannot list namespaces: HTTP %s %s" % (code, data.get("error", "")))
+            return []
+        out = []
+        for ns in data.get("items", []):
+            if ns.get("status", {}).get("phase") == "Terminating":
+                continue
+            out.append(ns["metadata"]["name"])
+        return out
+
+    def list_sds(namespace):
+        path = "/apis/%s/%s/namespaces/%s/%s" % (GROUP, VERSION, namespace, PLURAL)
+        code, data = api("GET", path)
+        if code == 404:
+            return []
+        if code != 200:
+            log("cannot list sds in %s: HTTP %s %s" % (namespace, code, data.get("error", "")))
+            return []
+        return data.get("items", [])
+
+    def list_nodes(include_cp, selector):
+        code, data = api("GET", "/api/v1/nodes")
+        if code != 200:
+            log("cannot list nodes: HTTP %s %s" % (code, data.get("error", "")))
+            return []
+        nodes = []
+        for n in data.get("items", []):
+            meta = n.get("metadata", {})
+            spec = n.get("spec", {})
+            labels = meta.get("labels", {})
+            if spec.get("unschedulable"):
+                continue
+            if not include_cp and (
+                "node-role.kubernetes.io/control-plane" in labels
+                or "node-role.kubernetes.io/master" in labels
+            ):
+                continue
+            ok = True
+            for k, v in selector.items():
+                if labels.get(k) != v:
+                    ok = False
+                    break
+            if ok:
+                nodes.append(meta["name"])
+        return sorted(nodes)
+
+    def list_owned_pods(namespace, owner):
+        selector = urllib.parse.quote("training.formacion.cloud/owner=" + owner)
+        path = "/api/v1/namespaces/%s/pods?labelSelector=%s" % (namespace, selector)
+        code, data = api("GET", path)
+        if code == 404:
+            return []
+        if code != 200:
+            log("cannot list pods in %s: HTTP %s %s" % (namespace, code, data.get("error", "")))
+            return []
+        return data.get("items", [])
+
+    def pod_manifest(cr, node, pod_name):
+        ns = cr["metadata"]["namespace"]
+        name = cr["metadata"]["name"]
+        uid = cr["metadata"]["uid"]
+        spec = cr.get("spec", {})
+        image = spec.get("image", "busybox:1.36")
+        command = spec.get(
+            "command",
+            ["sh", "-c", "while true; do echo $(date) node=$NODE_NAME pod=$HOSTNAME; sleep 30; done"],
+        )
+        mount_path = spec.get("mountPath", "/data")
+        return {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": pod_name,
+                "namespace": ns,
+                "labels": {
+                    "app": name,
+                    "training.formacion.cloud/managed-by": "statefuldaemonset-controller",
+                    "training.formacion.cloud/owner": name,
+                    "training.formacion.cloud/node": node,
+                },
+                "ownerReferences": [
+                    {
+                        "apiVersion": GROUP + "/" + VERSION,
+                        "kind": "StatefulDaemonSet",
+                        "name": name,
+                        "uid": uid,
+                        "controller": True,
+                        "blockOwnerDeletion": False,
+                    }
+                ],
+            },
+            "spec": {
+                "nodeName": node,
+                "restartPolicy": "Always",
+                "containers": [
+                    {
+                        "name": "main",
+                        "image": image,
+                        "imagePullPolicy": spec.get("imagePullPolicy", "IfNotPresent"),
+                        "command": command,
+                        "env": [{"name": "NODE_NAME", "value": node}],
+                        "volumeMounts": [{"name": "data", "mountPath": mount_path}],
+                    }
+                ],
+                "volumes": [{"name": "data", "emptyDir": {}}],
+            },
+        }
+
+    def patch_status(namespace, name, desired, current, nodes):
+        path = "/apis/%s/%s/namespaces/%s/%s/%s/status" % (
+            GROUP,
+            VERSION,
+            namespace,
+            PLURAL,
+            name,
+        )
+        body = {"status": {"desired": desired, "current": current, "nodes": ",".join(nodes)}}
+        code, data = api("PATCH", path, body, "application/merge-patch+json")
+        if code not in (200, 201):
+            log("cannot patch status %s/%s: HTTP %s %s" % (namespace, name, code, data.get("error", "")))
+
+    def reconcile_one(cr):
+        meta = cr.get("metadata", {})
+        namespace = meta.get("namespace")
+        name = meta.get("name")
+        if meta.get("deletionTimestamp"):
+            return
+
+        spec = cr.get("spec", {})
+        nodes = list_nodes(bool(spec.get("includeControlPlane", False)), spec.get("nodeSelector", {}) or {})
+        desired_names = {safe_name(name, node): node for node in nodes}
+
+        pods = list_owned_pods(namespace, name)
+        existing = {
+            p["metadata"]["name"]: p
+            for p in pods
+            if not p["metadata"].get("deletionTimestamp")
+        }
+
+        for pod_name, node in desired_names.items():
+            if pod_name not in existing:
+                code, data = api("POST", "/api/v1/namespaces/%s/pods" % namespace, pod_manifest(cr, node, pod_name))
+                if code in (200, 201):
+                    log("created pod %s/%s on %s" % (namespace, pod_name, node))
+                elif code != 409:
+                    log("cannot create pod %s/%s: HTTP %s %s" % (namespace, pod_name, code, data.get("error", "")))
+
+        for pod_name in list(existing.keys()):
+            if pod_name not in desired_names:
+                api("DELETE", "/api/v1/namespaces/%s/pods/%s" % (namespace, pod_name))
+                log("deleted extra pod %s/%s" % (namespace, pod_name))
+
+        pods = list_owned_pods(namespace, name)
+        current = 0
+        for p in pods:
+            if p["metadata"]["name"] in desired_names and p.get("status", {}).get("phase") == "Running":
+                current += 1
+
+        patch_status(namespace, name, len(nodes), current, nodes)
+        log("reconciled %s/%s desired=%d current=%d" % (namespace, name, len(nodes), current))
+
+    def main():
+        log("sds lab controller started")
+        while True:
+            try:
+                for ns in list_active_namespaces():
+                    for cr in list_sds(ns):
+                        reconcile_one(cr)
+            except Exception as e:
+                log("controller loop exception: %r" % e)
+            time.sleep(10)
+
+    if __name__ == "__main__":
+        main()

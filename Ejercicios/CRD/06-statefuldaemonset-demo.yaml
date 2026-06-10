@@ -1,0 +1,14 @@
+apiVersion: lab.formacion.cloud/v1alpha1
+kind: StatefulDaemonSet
+metadata:
+  name: node-agent
+  namespace: sds-lab
+spec:
+  includeControlPlane: false
+  image: busybox:1.36
+  imagePullPolicy: IfNotPresent
+  mountPath: /data
+  command:
+    - sh
+    - -c
+    - while true; do echo "node=$NODE_NAME pod=$HOSTNAME data=$(date)" | tee -a /data/log.txt; sleep 30; done
