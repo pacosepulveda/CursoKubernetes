@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-web
+  namespace: svc-troubleshooting
+  labels:
+    app: catalog-web
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: catalog-web
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: catalog-web
+        component: frontend
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
