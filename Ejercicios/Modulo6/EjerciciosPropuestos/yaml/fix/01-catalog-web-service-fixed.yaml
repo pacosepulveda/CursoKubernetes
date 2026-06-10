@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-web
+  namespace: svc-troubleshooting
+  labels:
+    app: catalog-web
+    exercise: troubleshooting
+spec:
+  type: ClusterIP
+  selector:
+    app: catalog-web
+    component: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
