@@ -1,323 +1,389 @@
-# Ejercicios Módulo 12 - Ingress
+# Ejercicios Módulo 11 - Seguridad: RBAC y NetworkPolicies
 
-## Objetivo
-
-En este módulo vamos a instalar y probar un **Ingress Controller NGINX** en un clúster Kubernetes instalado con `kubeadm` sobre instancias EC2.
-
-El objetivo es entender la diferencia entre:
-
-- `Service` de tipo `ClusterIP`: expone una aplicación solo dentro del clúster.
-- `Service` de tipo `NodePort`: expone una aplicación en un puerto de los nodos.
-- `Ingress`: permite enrutar tráfico HTTP/HTTPS hacia distintos servicios usando reglas de host y/o path.
-
-> En un clúster EKS es habitual exponer el Ingress Controller con un `LoadBalancer` de AWS. En este laboratorio, al usar `kubeadm` sobre EC2, normalmente no hay integración automática con AWS Load Balancer, por lo que instalaremos `ingress-nginx` con `Service` de tipo `NodePort`.
+> Entorno previsto: clúster Kubernetes instalado con `kubeadm` sobre instancias EC2 Ubuntu 22.04, runtime `containerd` y CNI Calico ya instalado.
 
 ---
 
-## 1. Comprobar requisitos previos
+## 1. Comprobaciones iniciales
 
-Ejecuta desde el nodo desde el que tengas configurado `kubectl`:
+Comprueba que el clúster está operativo:
 
 ```bash
 kubectl get nodes -o wide
 kubectl get pods -A
-helm version --short
 ```
 
-También comprobaremos que no hay un Ingress Controller instalado previamente:
+Comprueba que Calico está instalado. Dependiendo de cómo se haya instalado, los pods estarán en `kube-system`, `calico-system` o ambos:
 
 ```bash
-kubectl get ns ingress-nginx
-kubectl get ingressclass
+kubectl get pods -A | grep -i calico
 ```
 
-Si el namespace no existe, es normal.
+También podemos comprobar que el API de NetworkPolicy está disponible:
+
+```bash
+kubectl api-resources | grep -i networkpolicies
+```
 
 ---
 
-## 2. Instalar ingress-nginx con Helm
+## 2. RBAC
 
-Añadimos el repositorio oficial del proyecto `ingress-nginx`:
+RBAC regula qué puede hacer una identidad autenticada dentro de Kubernetes. Los objetos básicos son:
 
-```bash
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
-```
+- `Role`: permisos dentro de un namespace.
+- `ClusterRole`: permisos de ámbito clúster, o reutilizables desde un `RoleBinding`.
+- `RoleBinding`: asigna un `Role` o `ClusterRole` a un usuario, grupo o ServiceAccount dentro de un namespace.
+- `ClusterRoleBinding`: asigna permisos con ámbito de clúster.
 
-Instalamos el controlador usando `NodePort`:
+En este laboratorio no vamos a crear usuarios IAM ni a tocar `aws-auth`, porque eso solo aplica a EKS. Usaremos una `ServiceAccount` llamada `rbac-student` para representar una identidad limitada.
 
-```bash
-helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx \
-  --create-namespace \
-  --set controller.service.type=NodePort \
-  --set controller.service.nodePorts.http=30080 \
-  --set controller.service.nodePorts.https=30443
-```
+### 2.1 Crear el namespace, la aplicación, la ServiceAccount y los permisos
 
-Esperamos a que el controlador esté disponible:
+Aplica el manifiesto:
 
 ```bash
-kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller
+kubectl apply -f modulo11-rbac.yaml
 ```
 
-Comprobamos los recursos creados:
+Comprueba los recursos:
 
 ```bash
-kubectl get pods -n ingress-nginx
-kubectl get svc -n ingress-nginx
-kubectl get ingressclass
+kubectl get all -n rbac-test
+kubectl get sa -n rbac-test
+kubectl get role,rolebinding -n rbac-test
 ```
 
-La salida del servicio debe mostrar algo parecido a esto:
+El manifiesto crea:
+
+- Namespace `rbac-test`.
+- Deployment `nginx`.
+- ServiceAccount `rbac-student`.
+- Role `workload-reader`, con permisos `get`, `list` y `watch` sobre pods y deployments.
+- RoleBinding que une la ServiceAccount con el Role.
+
+### 2.2 Comprobar permisos con `kubectl auth can-i`
+
+Probamos qué puede hacer la ServiceAccount:
+
+```bash
+kubectl auth can-i list pods \
+  -n rbac-test \
+  --as=system:serviceaccount:rbac-test:rbac-student
+```
+
+Resultado esperado:
 
 ```text
-NAME                                 TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)
-ingress-nginx-controller             NodePort   10.x.x.x        <none>        80:30080/TCP,443:30443/TCP
+yes
 ```
 
-> Si aparece `LoadBalancer` y `EXTERNAL-IP: <pending>`, la instalación no se ha adaptado correctamente al entorno kubeadm. Reinstala el chart usando los parámetros anteriores.
-
----
-
-## 3. Preparar el namespace del ejercicio
-
-Crearemos todos los recursos de aplicación en un namespace separado:
+Puede listar deployments en su namespace:
 
 ```bash
-kubectl create namespace ingress-demo
+kubectl auth can-i list deployments.apps \
+  -n rbac-test \
+  --as=system:serviceaccount:rbac-test:rbac-student
 ```
 
----
-
-## 4. Desplegar la aplicación 2048
-
-Aplicamos el manifiesto local:
-
-```bash
-kubectl apply -f modulo12-2048.yaml
-```
-
-Comprobamos que el Deployment, el Pod y el Service están funcionando:
-
-```bash
-kubectl -n ingress-demo get deploy,pod,svc -o wide
-```
-
-El servicio `service-2048` es de tipo `ClusterIP`, porque no queremos exponer directamente la aplicación. La expondremos a través del Ingress Controller.
-
-Prueba interna desde un pod temporal:
-
-```bash
-kubectl -n ingress-demo run curl-test --rm -it --restart=Never \
-  --image=curlimages/curl:8.10.1 -- \
-  curl -I http://service-2048
-```
-
-Debe devolver una respuesta HTTP, normalmente `HTTP/1.1 200 OK`.
-
----
-
-## 5. Desplegar la aplicación hello
-
-Aplicamos el segundo manifiesto:
-
-```bash
-kubectl apply -f modulo12-hello.yaml
-```
-
-Comprobamos los recursos:
-
-```bash
-kubectl -n ingress-demo get deploy,pod,svc -o wide
-```
-
-Prueba interna:
-
-```bash
-kubectl -n ingress-demo run curl-test --rm -it --restart=Never \
-  --image=curlimages/curl:8.10.1 -- \
-  curl http://hello-world
-```
-
----
-
-## 6. Crear el primer Ingress: raíz hacia 2048
-
-Aplicamos el primer Ingress:
-
-```bash
-kubectl apply -f modulo12-ingress-2048.yaml
-```
-
-Comprobamos que se ha creado:
-
-```bash
-kubectl -n ingress-demo get ingress
-kubectl -n ingress-demo describe ingress demo-ingress-2048
-```
-
-Como no estamos usando un DNS real, accederemos usando la IP pública de cualquier nodo y el puerto NodePort `30080`.
-
-Primero, localiza una IP pública de un nodo EC2:
-
-```bash
-kubectl get nodes -o wide
-```
-
-Guarda la IP pública de uno de los nodos en una variable:
-
-```bash
-export NODE_PUBLIC_IP=<IP_PUBLICA_DE_UN_NODO>
-```
-
-Prueba con `curl`:
-
-```bash
-curl -H 'Host: demo.local' http://$NODE_PUBLIC_IP:30080/
-```
-
-También puedes probarlo desde el navegador:
+Resultado esperado:
 
 ```text
-http://<IP_PUBLICA_DE_UN_NODO>:30080/
+yes
 ```
 
-En el navegador puede funcionar sin cabecera `Host` porque el Ingress también incluye una regla sin host. Con `curl` usamos `Host: demo.local` para mostrar explícitamente cómo funciona el enrutamiento por host.
+No puede listar pods en otro namespace:
+
+```bash
+kubectl auth can-i list pods \
+  -n kube-system \
+  --as=system:serviceaccount:rbac-test:rbac-student
+```
+
+Resultado esperado:
+
+```text
+no
+```
+
+No puede borrar pods en su propio namespace, porque solo le dimos `get`, `list` y `watch`:
+
+```bash
+kubectl auth can-i delete pods \
+  -n rbac-test \
+  --as=system:serviceaccount:rbac-test:rbac-student
+```
+
+Resultado esperado:
+
+```text
+no
+```
+
+### 2.3 Ejecutar comandos simulando esa identidad
+
+El usuario administrador del clúster puede impersonar otras identidades. Esto nos permite probar RBAC sin crear kubeconfigs nuevos.
+
+Listar pods como `rbac-student`:
+
+```bash
+kubectl get pods -n rbac-test \
+  --as=system:serviceaccount:rbac-test:rbac-student
+```
+
+Debe funcionar.
+
+Intentar listar pods en `kube-system`:
+
+```bash
+kubectl get pods -n kube-system \
+  --as=system:serviceaccount:rbac-test:rbac-student
+```
+
+Debe fallar con un error similar a:
+
+```text
+Error from server (Forbidden): pods is forbidden: User "system:serviceaccount:rbac-test:rbac-student" cannot list resource "pods" in API group "" in the namespace "kube-system"
+```
+
+### 2.4 Probar acceso denegado a Secrets
+
+Creamos un Secret de prueba:
+
+```bash
+kubectl apply -f modulo11-rbac-deny-secret.yaml
+```
+
+El administrador puede verlo:
+
+```bash
+kubectl get secret demo-secret -n rbac-test
+```
+
+Pero `rbac-student` no debe poder leer Secrets:
+
+```bash
+kubectl get secret demo-secret -n rbac-test \
+  --as=system:serviceaccount:rbac-test:rbac-student
+```
+
+Resultado esperado:
+
+```text
+Error from server (Forbidden): secrets "demo-secret" is forbidden
+```
+
+### 2.5 Crear un token temporal de la ServiceAccount, opcional
+
+En Kubernetes moderno, los tokens de ServiceAccount ya no se crean automáticamente como Secrets permanentes. Podemos crear un token temporal así:
+
+```bash
+kubectl -n rbac-test create token rbac-student --duration=1h
+```
+
+Este token podría usarse para construir un kubeconfig limitado, aunque para el ejercicio CKA suele ser suficiente validar permisos con `kubectl auth can-i` y `--as`.
 
 ---
 
-## 7. Añadir enrutamiento por path: `/hello`
+## 3. NetworkPolicies con Calico
 
-Ahora vamos a modificar el Ingress para que:
+Por defecto, si no hay políticas de red que seleccionen un pod, Kubernetes permite la comunicación entre pods. Las `NetworkPolicy` permiten restringir tráfico de entrada y/o salida a nivel L3/L4. Para que se apliquen, el CNI debe soportarlas. En este laboratorio usamos Calico.
 
-- `/` apunte al servicio `service-2048`.
-- `/hello` apunte al servicio `hello-world`.
+Vamos a crear tres componentes en el namespace `netpol-demo`:
 
-Aplicamos el manifiesto completo:
+- `client`: pod desde el que haremos pruebas.
+- `frontend`: servicio HTTP interno.
+- `backend`: servicio HTTP interno.
 
-```bash
-kubectl apply -f modulo12-ingress-paths.yaml
+El flujo final deseado será:
+
+```text
+client -> frontend -> backend
 ```
 
-Comprobamos el Ingress:
+Pero no permitiremos acceso directo de `client` a `backend`.
+
+### 3.1 Crear workloads de prueba
 
 ```bash
-kubectl -n ingress-demo describe ingress demo-ingress
+kubectl apply -f modulo11-netpol-workloads.yaml
+kubectl -n netpol-demo get pods,svc -o wide
 ```
 
-Probamos la ruta raíz:
+Espera a que todo esté en `Running`:
 
 ```bash
-curl -I -H 'Host: demo.local' http://$NODE_PUBLIC_IP:30080/
+kubectl -n netpol-demo wait --for=condition=Ready pod/client --timeout=120s
+kubectl -n netpol-demo rollout status deployment/frontend
+kubectl -n netpol-demo rollout status deployment/backend
 ```
 
-Probamos la ruta `/hello`:
+### 3.2 Probar comunicación antes de aplicar políticas
+
+Desde el pod `client`, prueba el acceso a `frontend`:
 
 ```bash
-curl -H 'Host: demo.local' http://$NODE_PUBLIC_IP:30080/hello
+kubectl -n netpol-demo exec client -- wget -qO- http://frontend
 ```
 
-La petición a `/hello` debe responder desde la aplicación `hello-world`.
+Resultado esperado:
+
+```text
+frontend OK
+```
+
+Prueba acceso directo a `backend`:
+
+```bash
+kubectl -n netpol-demo exec client -- wget -qO- http://backend
+```
+
+Resultado esperado:
+
+```text
+backend OK
+```
+
+Mientras no existan NetworkPolicies que seleccionen estos pods, el tráfico está permitido.
+
+### 3.3 Aplicar denegación por defecto de entrada
+
+Aplicamos una política que selecciona todos los pods del namespace y bloquea todo el tráfico entrante que no esté permitido explícitamente:
+
+```bash
+kubectl apply -f modulo11-netpol-default-deny.yaml
+kubectl -n netpol-demo get networkpolicy
+```
+
+Ahora `client` ya no debería poder acceder a `frontend` ni a `backend`:
+
+```bash
+kubectl -n netpol-demo exec client -- wget -T 3 -qO- http://frontend || echo "bloqueado"
+kubectl -n netpol-demo exec client -- wget -T 3 -qO- http://backend || echo "bloqueado"
+```
+
+Resultado esperado:
+
+```text
+bloqueado
+bloqueado
+```
+
+### 3.4 Permitir tráfico de `client` a `frontend`
+
+```bash
+kubectl apply -f modulo11-netpol-allow-client-frontend.yaml
+```
+
+Ahora `client` sí debe poder acceder a `frontend`:
+
+```bash
+kubectl -n netpol-demo exec client -- wget -qO- http://frontend
+```
+
+Resultado esperado:
+
+```text
+frontend OK
+```
+
+Pero sigue sin poder acceder directamente a `backend`:
+
+```bash
+kubectl -n netpol-demo exec client -- wget -T 3 -qO- http://backend || echo "bloqueado"
+```
+
+Resultado esperado:
+
+```text
+bloqueado
+```
+
+### 3.5 Permitir tráfico de `frontend` a `backend`
+
+```bash
+kubectl apply -f modulo11-netpol-allow-frontend-backend.yaml
+```
+
+Ahora probamos desde el pod de `frontend` hacia el servicio `backend`:
+
+```bash
+FRONTEND_POD=$(kubectl -n netpol-demo get pod -l app=frontend -o jsonpath='{.items[0].metadata.name}')
+kubectl -n netpol-demo exec "$FRONTEND_POD" -- wget -qO- http://backend
+```
+
+Resultado esperado:
+
+```text
+backend OK
+```
+
+Y comprobamos que `client` sigue sin acceder directamente a `backend`:
+
+```bash
+kubectl -n netpol-demo exec client -- wget -T 3 -qO- http://backend || echo "bloqueado"
+```
+
+Resultado esperado:
+
+```text
+bloqueado
+```
+
+### 3.6 Inspeccionar las políticas
+
+```bash
+kubectl -n netpol-demo describe networkpolicy default-deny-ingress
+kubectl -n netpol-demo describe networkpolicy allow-client-to-frontend
+kubectl -n netpol-demo describe networkpolicy allow-frontend-to-backend
+```
+
+También podemos revisar los endpoints para confirmar que los Services apuntan a los pods esperados:
+
+```bash
+kubectl -n netpol-demo get endpoints
+```
+
+### 3.7 Nota sobre DNS y políticas de egress
+
+En este ejercicio solo hemos restringido `Ingress`. Si también creamos políticas de `Egress`, hay que permitir explícitamente DNS hacia CoreDNS; si no, nombres como `frontend` o `backend` dejarán de resolverse.
+
+El archivo `modulo11-netpol-allow-dns-egress-opcional.yaml` muestra un ejemplo de permiso DNS, pero no es necesario aplicarlo en el flujo principal del ejercicio.
 
 ---
 
-## 8. Sobre `rewrite-target`
+## 4. Limpieza
 
-Muchas aplicaciones esperan recibir las peticiones en `/`. Si publicamos una aplicación bajo `/hello`, el backend recibirá por defecto la ruta `/hello`.
-
-Para aplicaciones que no soportan ese prefijo, podemos usar la anotación de NGINX:
-
-```yaml
-nginx.ingress.kubernetes.io/rewrite-target: /
-```
-
-En este módulo usamos esa anotación en `modulo12-ingress-paths.yaml` para que `/hello` se reescriba como `/` antes de llegar al servicio `hello-world`.
-
-> Importante: `rewrite-target` se aplica al Ingress completo. En escenarios reales, cuando distintas rutas necesitan comportamientos distintos, suele ser más limpio crear Ingress separados.
-
----
-
-## 9. Ejercicio: crear un Ingress separado para hello
-
-Crea un nuevo Ingress llamado `hello-ingress` que publique `hello-world` bajo el host `hello.local`.
-
-Debe cumplir estas condiciones:
-
-- Namespace: `ingress-demo`
-- `ingressClassName: nginx`
-- Host: `hello.local`
-- Path: `/`
-- Servicio backend: `hello-world`
-- Puerto backend: `80`
-
-Después pruébalo con:
+Eliminar recursos de RBAC:
 
 ```bash
-curl -H 'Host: hello.local' http://$NODE_PUBLIC_IP:30080/
+kubectl delete -f modulo11-rbac-deny-secret.yaml --ignore-not-found
+kubectl delete -f modulo11-rbac.yaml --ignore-not-found
 ```
 
-Solución propuesta:
+Eliminar recursos de NetworkPolicies:
 
 ```bash
-kubectl apply -f modulo12-ingress-hello-host.yaml
-curl -H 'Host: hello.local' http://$NODE_PUBLIC_IP:30080/
+kubectl delete -f modulo11-netpol-allow-frontend-backend.yaml --ignore-not-found
+kubectl delete -f modulo11-netpol-allow-client-frontend.yaml --ignore-not-found
+kubectl delete -f modulo11-netpol-default-deny.yaml --ignore-not-found
+kubectl delete -f modulo11-netpol-workloads.yaml --ignore-not-found
+```
+
+Comprobar que no quedan namespaces del ejercicio:
+
+```bash
+kubectl get ns | grep -E 'rbac-test|netpol-demo' || true
 ```
 
 ---
 
-## 10. Diagnóstico básico de Ingress
+## 5. Qué se ha corregido respecto al ejercicio original
 
-Si no funciona, revisa en este orden:
-
-```bash
-# El controlador está Running
-kubectl -n ingress-nginx get pods
-
-# El Service del controlador expone el puerto 30080
-kubectl -n ingress-nginx get svc ingress-nginx-controller
-
-# Existe una IngressClass nginx
-kubectl get ingressclass
-
-# Los backends existen y tienen endpoints
-kubectl -n ingress-demo get svc
-kubectl -n ingress-demo get endpoints
-
-# El Ingress tiene reglas correctas
-kubectl -n ingress-demo describe ingress
-
-# Logs del controlador
-kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --tail=100
-```
-
-En AWS EC2, recuerda comprobar también el Security Group de los nodos. Para acceder desde tu equipo, el Security Group debe permitir tráfico entrante al puerto `30080/TCP` desde tu IP.
-
----
-
-## 11. Limpieza
-
-Eliminamos los recursos del ejercicio:
-
-```bash
-kubectl delete namespace ingress-demo
-```
-
-Si también quieres eliminar el Ingress Controller:
-
-```bash
-helm uninstall ingress-nginx -n ingress-nginx
-kubectl delete namespace ingress-nginx
-```
-
----
-
-## Resumen
-
-En este módulo hemos visto:
-
-- Qué problema resuelve Ingress.
-- Cómo instalar `ingress-nginx` con Helm.
-- Por qué en kubeadm sobre EC2 usamos `NodePort` en lugar de `LoadBalancer`.
-- Cómo enrutar tráfico HTTP por path.
-- Cómo diagnosticar problemas habituales de Ingress.
+- Se elimina la dependencia de EKS, IAM, `aws-auth`, `eksctl` y credenciales AWS.
+- Se usa una `ServiceAccount` para practicar RBAC de forma portable en kubeadm.
+- Se evita crear usuarios cloud reales y access keys.
+- Se reemplazan los manifiestos remotos por YAML locales.
+- Se usa Calico ya instalado, en vez de reinstalarlo dentro del módulo.
+- Se sustituye la demo visual de EKS por una demo verificable con comandos `wget` dentro del clúster.
+- Se mantiene la idea principal: mínimo privilegio con RBAC y aislamiento progresivo con NetworkPolicies.
