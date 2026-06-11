@@ -378,12 +378,3 @@ kubectl get ns | grep -E 'rbac-test|netpol-demo' || true
 
 ---
 
-## 5. Qué se ha corregido respecto al ejercicio original
-
-- Se elimina la dependencia de EKS, IAM, `aws-auth`, `eksctl` y credenciales AWS.
-- Se usa una `ServiceAccount` para practicar RBAC de forma portable en kubeadm.
-- Se evita crear usuarios cloud reales y access keys.
-- Se reemplazan los manifiestos remotos por YAML locales.
-- Se usa Calico ya instalado, en vez de reinstalarlo dentro del módulo.
-- Se sustituye la demo visual de EKS por una demo verificable con comandos `wget` dentro del clúster.
-- Se mantiene la idea principal: mínimo privilegio con RBAC y aislamiento progresivo con NetworkPolicies.
