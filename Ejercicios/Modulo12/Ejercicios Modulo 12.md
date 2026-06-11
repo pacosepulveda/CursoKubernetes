@@ -189,10 +189,29 @@ En el navegador puede funcionar sin cabecera `Host` porque el Ingress también i
 
 ## 7. Añadir enrutamiento por path: `/hello`
 
-Ahora vamos a modificar el Ingress para que:
+Ahora vamos a actualizar el mismo Ingress creado en el paso anterior.
+
+En el paso 6 creamos un Ingress llamado `demo-ingress-2048` que enviaba la ruta `/` hacia el servicio `service-2048`.
+
+Ahora vamos a aplicar una versión ampliada de ese mismo Ingress para que:
 
 - `/` apunte al servicio `service-2048`.
 - `/hello` apunte al servicio `hello-world`.
+
+> Importante: el manifiesto `modulo12-ingress-paths.yaml` debe usar el mismo nombre de Ingress que el manifiesto anterior:
+>
+> `metadata.name: demo-ingress-2048`
+>
+> Si se usara otro nombre de Ingress con el mismo `host` y el mismo `path`, el webhook de validación de `ingress-nginx` rechazaría el manifiesto porque ya existiría una regla para `demo.local` y `/`.
+
+Antes de aplicar el cambio, podemos ver el Ingress actual:
+
+```bash
+kubectl -n ingress-demo get ingress
+kubectl -n ingress-demo describe ingress demo-ingress-2048
+```
+
+Observa que actualmente solo existe la ruta `/`.
 
 Aplicamos el manifiesto completo:
 
@@ -203,7 +222,7 @@ kubectl apply -f modulo12-ingress-paths.yaml
 Comprobamos el Ingress:
 
 ```bash
-kubectl -n ingress-demo describe ingress demo-ingress
+kubectl -n ingress-demo describe ingress demo-ingress-2048
 ```
 
 Probamos la ruta raíz:
