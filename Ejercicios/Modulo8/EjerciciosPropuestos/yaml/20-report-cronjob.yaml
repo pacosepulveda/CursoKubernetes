@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-cron
+  namespace: cka-scheduling-lab
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: report-cron
+        spec:
+          restartPolicy: Never
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: cka.formacion.io/pool
+                        operator: In
+                        values:
+                          - batch
+          containers:
+            - name: report
+              image: busybox:1.36
+              command:
+                - sh
+                - -c
+                - |
+                  echo "Running scheduled report..."
+                  date
+                  sleep 20
+                  echo "Scheduled report completed."
