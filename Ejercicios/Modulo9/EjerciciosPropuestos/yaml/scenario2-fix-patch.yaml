@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-oom
+  namespace: lab-troubleshooting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-oom
+  template:
+    metadata:
+      labels:
+        app: app-oom
+    spec:
+      containers:
+        - name: app
+          image: python:3.11-alpine
+          command:
+            - sh
+            - -c
+            - |
+              python -c "import time; x=bytearray(200*1024*1024); print('Memoria reservada correctamente'); time.sleep(3600)"
+          resources:
+            requests:
+              memory: "64Mi"
+            limits:
+              memory: "256Mi"

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-inexistente
+  namespace: lab-troubleshooting
+data:
+  data.key: "valor-de-ejemplo"
