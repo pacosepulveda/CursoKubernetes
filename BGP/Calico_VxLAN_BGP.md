@@ -1,4 +1,4 @@
-# Módulo avanzado: Integración de Kubernetes con red física usando Calico VXLAN + BGP
+# Integración de Kubernetes con red física usando Calico VXLAN + BGP
 
 ## 1. Objetivo del módulo
 
@@ -1035,70 +1035,19 @@ Para un entorno real, aplicaría estas buenas prácticas:
 
 ---
 
-## 24. Ejercicio propuesto para alumnos
+## 24. Referencias recomendadas
 
-### Enunciado
-
-Una empresa dispone de un clúster Kubernetes on-premise con nodos físicos conectados a una red leaf-spine. El CNI utilizado es Calico en modo VXLAN. El equipo de red quiere que determinadas redes internas del CPD puedan llegar directamente a los pods del clúster.
-
-Se pide diseñar y validar una integración BGP entre Calico y un route reflector externo.
-
-Los alumnos deberán:
-
-1. Identificar el Pod CIDR usado por Calico.
-2. Comprobar el modo de encapsulación VXLAN.
-3. Identificar los bloques de pods asignados a cada nodo.
-4. Configurar un RR externo usando FRR.
-5. Configurar Calico para establecer sesión BGP con el RR.
-6. Verificar que el RR aprende las rutas de los bloques de pods.
-7. Probar conectividad desde una máquina externa hacia un pod.
-8. Analizar si es mejor anunciar pods, servicios o rangos LoadBalancer.
-9. Documentar los riesgos de seguridad del diseño.
-10. Proponer filtros BGP básicos para evitar anuncios no deseados.
-
----
-
-## 25. Preguntas de reflexión
-
-1. ¿Qué ventaja aporta VXLAN en este diseño?
-2. ¿Qué problema resuelve BGP?
-3. ¿Por qué puede ser peligroso anunciar todo el Pod CIDR?
-4. ¿Qué diferencia hay entre anunciar bloques de pods y anunciar servicios?
-5. ¿Qué ocurre si un cliente externo llega a un nodo que no aloja el pod destino?
-6. ¿Qué impacto puede tener `natOutgoing: true`?
-7. ¿Por qué la MTU es especialmente importante con VXLAN?
-8. ¿Qué controles de seguridad aplicarías antes de permitir acceso directo a pods desde la red corporativa?
-
----
-
-## 26. Conclusión
-
-Usar **Calico VXLAN para el tráfico entre pods** y **BGP para anunciar rutas hacia la infraestructura local** es una arquitectura válida y potente en entornos on-premise avanzados.
-
-La clave es entender que VXLAN y BGP resuelven problemas diferentes:
-
-```text
-VXLAN permite que los pods se comuniquen entre nodos aunque la red física no enrute Pod CIDRs.
-
-BGP permite que la red física aprenda rutas hacia Kubernetes.
-```
-
-Para un entorno productivo, la recomendación general sería:
-
-- Mantener VXLAN si se quiere independencia respecto a la red física.
-- Usar BGP con cuidado para integración con el CPD.
-- Preferir anunciar servicios o rangos LoadBalancer antes que todos los pods.
-- Anunciar bloques de pods solo cuando exista una necesidad clara.
-- Controlar rutas, NAT, MTU, seguridad y retorno del tráfico.
-
-Este tipo de diseño convierte Kubernetes en un elemento plenamente integrado con la red del CPD, pero también exige un nivel de operación más avanzado, coordinación con networking y una buena estrategia de seguridad.
-
----
-
-## 27. Referencias recomendadas
-
-- Documentación oficial de Calico: configuración de BGP.
-- Documentación oficial de Calico: configuración de VXLAN e IP-in-IP.
-- Documentación oficial de Calico: IPPool y direccionamiento.
-- Documentación oficial de FRRouting.
-- Documentación de Kubernetes sobre Services, Ingress y Gateway API.
+- [Documentación oficial de Calico: configuración de BGP](https://docs.tigera.io/calico/latest/networking/configuring/bgp)
+- [Documentación oficial de Calico: configuración de VXLAN e IP-in-IP](https://docs.tigera.io/calico/latest/networking/configuring/vxlan-ipip)
+- [Documentación oficial de Calico: IPPool y direccionamiento](https://docs.tigera.io/calico/latest/reference/resources/ippool)
+- [Documentación oficial de Calico: configuración inicial de IPPools](https://docs.tigera.io/calico/latest/networking/ipam/initial-ippool)
+- [Documentación oficial de Calico: tamaño de bloques IPAM](https://docs.tigera.io/calico/latest/networking/ipam/change-block-size)
+- [Documentación oficial de FRRouting](https://docs.frrouting.org/)
+- [Sitio oficial de FRRouting](https://frrouting.org/)
+- [Documentación oficial de Kubernetes: Services](https://kubernetes.io/docs/concepts/services-networking/service/)
+- [Documentación oficial de Kubernetes: Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)
+- [Documentación oficial de Kubernetes: Ingress Controllers](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/)
+- [Documentación oficial de Kubernetes: Gateway API](https://kubernetes.io/docs/concepts/services-networking/gateway/)
+- [Documentación oficial del proyecto Gateway API](https://gateway-api.sigs.k8s.io/)
+- [Gateway API: guía de introducción](https://gateway-api.sigs.k8s.io/guides/getting-started/introduction/)
+- [Gateway API: referencia de la especificación](https://gateway-api.sigs.k8s.io/reference/spec/)
