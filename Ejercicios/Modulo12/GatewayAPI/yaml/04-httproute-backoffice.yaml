@@ -1,0 +1,18 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aquila-backoffice-route
+  namespace: aquila
+spec:
+  parentRefs:
+    - name: aquila-gateway
+  hostnames:
+    - backoffice.aquila.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: backoffice-service
+          port: 80

@@ -1,0 +1,20 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aquila-audit-route
+  namespace: aquila
+spec:
+  parentRefs:
+    - name: aquila-gateway
+  hostnames:
+    - audit.aquila.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        # Error intencionado para practicar troubleshooting:
+        # este Service no existe. El correcto es audit-service.
+        - name: audit-service-wrong
+          port: 80
